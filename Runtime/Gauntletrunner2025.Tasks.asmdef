@@ -1,6 +1,17 @@
 {
     "name": "Gauntletrunner2025.Tasks",
-    "references": [],
+    "rootNamespace": "",
+    "references": [
+        "Unity.Entities",
+        "Unity.Collections"
+    ],
     "includePlatforms": [],
-    "excludePlatforms": []
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
 }
