@@ -32,9 +32,7 @@ public abstract partial class TaskSystem : SystemBase
 
             ecb.RemoveComponent<Task>(entity);
 
-            Debug.Log($"[{this.GetType().Name}] Task completed");
             OnTaskComplete(ecb, entity);
-
         }
 
         ecb.Playback(EntityManager);
