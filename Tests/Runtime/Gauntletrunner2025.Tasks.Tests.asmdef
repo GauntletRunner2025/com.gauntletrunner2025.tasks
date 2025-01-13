@@ -1,0 +1,11 @@
+{
+    "name": "Gauntletrunner2025.Tasks.Tests",
+    "references": [
+        "Gauntletrunner2025.Tasks"
+    ],
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": []
+}

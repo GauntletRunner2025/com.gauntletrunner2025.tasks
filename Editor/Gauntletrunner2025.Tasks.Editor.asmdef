@@ -1,0 +1,10 @@
+{
+    "name": "Gauntletrunner2025.Tasks.Editor",
+    "references": [
+      "Gauntletrunner2025.Tasks"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": []
+}
