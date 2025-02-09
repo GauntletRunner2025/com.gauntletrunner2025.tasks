@@ -7,19 +7,18 @@ public abstract partial class TaskSystem : SystemBase {
 
     protected abstract void OnTaskComplete(EntityManager em, Entity entity);
     protected abstract void OnTaskFailed(EntityManager em, Entity entity, AggregateException exception);
+    
+    // New: Abstract method for derived system's update logic
+    protected abstract void OnSystemUpdate();
 
-    //REquire that derivative systems supply a ComponentType pointing to their personal Task type
-    //Otherwise storing the Task in the base class (this) would not differentiate between them, eg UnityServices sign in and Auth sign in
-    //BUt we still need the component type of it to query for it
-
-    //This is defined in the derived class and is how we differentiate between different Tasks
-    //They are all the same, so when they are done, we filter out ours by the presence of this type
     protected abstract ComponentType FlagType { get; }
-
-    //an abstract array of component types that we will pass to RequireForUpdate
     protected abstract ComponentType[] RequiredForUpdate { get; }
 
+    protected virtual bool AllowMultipleTasks => false;
+    
     protected abstract bool Setup(EntityManager em, Entity entity, Task task);
+    
+    protected virtual bool ShouldCreateNewTask() => false;
 
     EntityQuery Query;
 
@@ -32,50 +31,59 @@ public abstract partial class TaskSystem : SystemBase {
     }
 
     protected sealed override void OnStartRunning() {
+        CreateNewTask();
+    }
+
+    protected bool CreateNewTask() {
         var task = new Task();
         var e = EntityManager.CreateEntity();
         if (!Setup(EntityManager, e, task)) {
-            //For some reason the system didn't want to
             EntityManager.DestroyEntity(e);
-            return;
+            return false;
         }
 
         EntityManager.AddComponentData(e, task);
         EntityManager.AddComponent(e, FlagType);
+        return true;
+    }
+
+    protected bool CanCreateNewTask() {
+        if (AllowMultipleTasks) return true;
+        return Query.CalculateEntityCount() == 0;
     }
 
     protected class Task : IComponentData, IEnableableComponent {
         public System.Threading.Tasks.Task Value;
     }
 
-    protected override void OnUpdate() {
+    // Seal OnUpdate to prevent derived systems from overriding
+    sealed protected override void OnUpdate() {
+        // Handle completed tasks
+        if (Query.CalculateEntityCount() > 0) {
+            using var entities = Query.ToEntityArray(Allocator.TempJob);
 
-        //We should separate out the logic for watching status into a different system
-        //And update it wit TaskComplete flags etc
-        //TODO
+            foreach (var e in entities) {
+                var item = EntityManager.GetComponentData<Task>(e);
+                if (!item.Value.IsCompleted)
+                    continue;
 
-        //Its going to be diffcult to remember not to override OnUpdate() in the base
+                if (item.Value.IsFaulted || item.Value.IsCanceled || !item.Value.IsCompletedSuccessfully) {
+                    OnTaskFailed(EntityManager, e, item.Value.Exception);
+                    EntityManager.SetComponentEnabled<Task>(e, false);
+                    continue;
+                }
 
-        if (Query.CalculateEntityCount() == 0)
-            return;
-
-        using var entities = Query.ToEntityArray(Allocator.TempJob);
-
-        foreach (var e in entities) {
-
-            var item = EntityManager.GetComponentData<Task>(e);
-            if (!item.Value.IsCompleted)
-                continue;
-
-            if (item.Value.IsFaulted || item.Value.IsCanceled || !item.Value.IsCompletedSuccessfully) {
-                OnTaskFailed(EntityManager, e, item.Value.Exception);
-                EntityManager.SetComponentEnabled<Task>(e, false);
-                continue;
+                EntityManager.RemoveComponent<Task>(e);
+                OnTaskComplete(EntityManager, e);
             }
+        }
 
-            EntityManager.RemoveComponent<Task>(e);
+        // Let the derived system do its update
+        OnSystemUpdate();
 
-            OnTaskComplete(EntityManager, e);
+        // Check if we should create a new task
+        if (CanCreateNewTask() && ShouldCreateNewTask()) {
+            CreateNewTask();
         }
     }
 }
