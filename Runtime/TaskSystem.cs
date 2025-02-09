@@ -14,24 +14,14 @@ public abstract partial class TaskSystem : SystemBase {
     protected abstract ComponentType FlagType { get; }
     protected abstract ComponentType[] RequiredForUpdate { get; }
 
-    protected virtual bool AllowMultipleTasks => false;
-    
     protected abstract bool Setup(EntityManager em, Entity entity, Task task);
     
     protected virtual bool ShouldCreateNewTask() => false;
 
-    EntityQuery Query;
-
     sealed protected override void OnCreate() {
-        Query = GetEntityQuery(typeof(Task), FlagType);
-
         foreach (var c in RequiredForUpdate) {
             RequireForUpdate(GetEntityQuery(RequiredForUpdate));
         }
-    }
-
-    protected sealed override void OnStartRunning() {
-        CreateNewTask();
     }
 
     protected bool CreateNewTask() {
@@ -47,11 +37,6 @@ public abstract partial class TaskSystem : SystemBase {
         return true;
     }
 
-    protected bool CanCreateNewTask() {
-        if (AllowMultipleTasks) return true;
-        return Query.CalculateEntityCount() == 0;
-    }
-
     protected class Task : IComponentData, IEnableableComponent {
         public System.Threading.Tasks.Task Value;
     }
@@ -59,31 +44,33 @@ public abstract partial class TaskSystem : SystemBase {
     // Seal OnUpdate to prevent derived systems from overriding
     sealed protected override void OnUpdate() {
         // Handle completed tasks
-        if (Query.CalculateEntityCount() > 0) {
-            using var entities = Query.ToEntityArray(Allocator.TempJob);
+        using var entities = SystemAPI.QueryBuilder().WithAll<Task>().WithAll(FlagType).Build().ToEntityArray(Allocator.TempJob);
+        
+        foreach (var e in entities) {
+            var item = EntityManager.GetComponentData<Task>(e);
+            if (!item.Value.IsCompleted)
+                continue;
 
-            foreach (var e in entities) {
-                var item = EntityManager.GetComponentData<Task>(e);
-                if (!item.Value.IsCompleted)
-                    continue;
-
-                if (item.Value.IsFaulted || item.Value.IsCanceled || !item.Value.IsCompletedSuccessfully) {
-                    OnTaskFailed(EntityManager, e, item.Value.Exception);
-                    EntityManager.SetComponentEnabled<Task>(e, false);
-                    continue;
-                }
-
-                EntityManager.RemoveComponent<Task>(e);
-                OnTaskComplete(EntityManager, e);
+            if (item.Value.IsFaulted || item.Value.IsCanceled || !item.Value.IsCompletedSuccessfully) {
+                OnTaskFailed(EntityManager, e, item.Value.Exception);
+                EntityManager.SetComponentEnabled<Task>(e, false);
+                continue;
             }
+
+            EntityManager.RemoveComponent<Task>(e);
+            OnTaskComplete(EntityManager, e);
         }
 
         // Let the derived system do its update
         OnSystemUpdate();
 
         // Check if we should create a new task
-        if (CanCreateNewTask() && ShouldCreateNewTask()) {
+        if (ShouldCreateNewTask()) {
             CreateNewTask();
         }
+    }
+
+    protected sealed override void OnStartRunning() {
+        CreateNewTask();
     }
 }
