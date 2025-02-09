@@ -5,6 +5,8 @@ using UnityEngine;
 
 public abstract partial class TaskSystem : SystemBase {
 
+    private EntityQuery taskQuery;
+
     protected abstract void OnTaskComplete(EntityManager em, Entity entity);
     protected abstract void OnTaskFailed(EntityManager em, Entity entity, AggregateException exception);
     
@@ -22,6 +24,11 @@ public abstract partial class TaskSystem : SystemBase {
         foreach (var c in RequiredForUpdate) {
             RequireForUpdate(GetEntityQuery(RequiredForUpdate));
         }
+
+        // Create the EntityQuery
+        taskQuery = GetEntityQuery(new EntityQueryDesc {
+            All = new ComponentType[] { typeof(Task), FlagType }
+        });
     }
 
     protected bool CreateNewTask() {
@@ -42,9 +49,9 @@ public abstract partial class TaskSystem : SystemBase {
     }
 
     // Seal OnUpdate to prevent derived systems from overriding
-    sealed protected override void OnUpdate() {
+    protected override void OnUpdate() {
         // Handle completed tasks
-        using var entities = SystemAPI.QueryBuilder().WithAll<Task>().WithAll(FlagType).Build().ToEntityArray(Allocator.TempJob);
+        using var entities = taskQuery.ToEntityArray(Allocator.TempJob);
         
         foreach (var e in entities) {
             var item = EntityManager.GetComponentData<Task>(e);
