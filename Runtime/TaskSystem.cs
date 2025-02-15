@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 using Unity.Collections;
 using Unity.Entities;
 using UnityEngine;
@@ -11,16 +12,16 @@ public abstract partial class TaskSystem : SystemBase
     protected abstract void OnTaskComplete(EntityManager em, Entity entity);
     protected abstract void OnTaskFailed(EntityManager em, Entity entity, AggregateException exception);
 
-    // Let derived systems decide if they want to create tasks on startup
-    protected virtual bool ShouldCreateTaskOnStartRunning => false;
+    //abstract field derivers must implement which says whether to auto create a task on start running
+    protected abstract bool AutoCreateTask { get; }
 
-    // Let derived systems implement their update logic
+    // New: Abstract method for derived system's update logic
     protected abstract void OnSystemUpdate();
 
     protected abstract ComponentType FlagType { get; }
     protected abstract ComponentType[] RequiredForUpdate { get; }
 
-    protected abstract bool Setup(EntityManager em, Entity entity, Task task);
+    protected abstract Task Setup(EntityManager em, Entity entity);
 
     sealed protected override void OnCreate()
     {
@@ -32,62 +33,57 @@ public abstract partial class TaskSystem : SystemBase
         // Create the EntityQuery
         taskQuery = GetEntityQuery(new EntityQueryDesc
         {
-            All = new ComponentType[] { typeof(Task), FlagType }
+            All = new ComponentType[] { typeof(TaskComponent), FlagType }
         });
     }
 
-    protected bool CreateNewTask()
+    protected void CreateNewTask()
     {
-        var task = new Task();
         var e = EntityManager.CreateEntity();
-        if (!Setup(EntityManager, e, task))
+        EntityManager.AddComponentData(e, new TaskComponent
         {
-            EntityManager.DestroyEntity(e);
-            return false;
-        }
+            Value = Setup(EntityManager, e)
+        });
 
-        EntityManager.AddComponentData(e, task);
         EntityManager.AddComponent(e, FlagType);
-        return task; // Return the created task without evaluation
     }
 
-    protected class Task : IComponentData, IEnableableComponent
+    public class TaskComponent : IComponentData, IEnableableComponent
     {
         public System.Threading.Tasks.Task Value;
     }
 
     // Seal OnUpdate to prevent derived systems from overriding
-    sealed protected override void OnUpdate()
+    protected override void OnUpdate()
     {
         // Handle completed tasks
         using var entities = taskQuery.ToEntityArray(Allocator.TempJob);
 
         foreach (var e in entities)
         {
-            var item = EntityManager.GetComponentData<Task>(e);
+            var item = EntityManager.GetComponentData<TaskComponent>(e);
             if (!item.Value.IsCompleted)
                 continue;
 
             if (item.Value.IsFaulted || item.Value.IsCanceled || !item.Value.IsCompletedSuccessfully)
             {
                 OnTaskFailed(EntityManager, e, item.Value.Exception);
-                EntityManager.SetComponentEnabled<Task>(e, false);
+                EntityManager.SetComponentEnabled<TaskComponent>(e, false);
                 continue;
             }
 
-            EntityManager.RemoveComponent<Task>(e);
+            EntityManager.RemoveComponent<TaskComponent>(e);
             OnTaskComplete(EntityManager, e);
         }
 
         // Let the derived system do its update
         OnSystemUpdate();
+
     }
 
     protected sealed override void OnStartRunning()
     {
-        if (ShouldCreateTaskOnStartRunning)
-        {
+        if (AutoCreateTask)
             CreateNewTask();
-        }
     }
 }
