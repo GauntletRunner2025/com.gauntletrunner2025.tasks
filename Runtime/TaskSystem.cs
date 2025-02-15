@@ -16,7 +16,7 @@ public abstract partial class TaskSystem : SystemBase {
     protected abstract ComponentType FlagType { get; }
     protected abstract ComponentType[] RequiredForUpdate { get; }
 
-    protected abstract bool Setup(EntityManager em, Entity entity, Task task);
+    protected abstract Task Setup(EntityManager em, Entity entity, Task task);
     
     protected virtual bool ShouldCreateNewTask() => false;
 
@@ -31,17 +31,13 @@ public abstract partial class TaskSystem : SystemBase {
         });
     }
 
-    protected bool CreateNewTask() {
-        var task = new Task();
+    protected virtual Task CreateNewTask() {
+        var task = new Task(); // Default task created
         var e = EntityManager.CreateEntity();
-        if (!Setup(EntityManager, e, task)) {
-            EntityManager.DestroyEntity(e);
-            return false;
-        }
-
-        EntityManager.AddComponentData(e, task);
+        task = Setup(EntityManager, e, task); // Update task to whatever Setup returns
+        EntityManager.AddComponentData(e, task); // Add the task to the entity
         EntityManager.AddComponent(e, FlagType);
-        return true;
+        return task; // Return the created task without evaluation
     }
 
     protected class Task : IComponentData, IEnableableComponent {
