@@ -9,7 +9,7 @@ public abstract partial class TaskSystem : SystemBase
 
     private EntityQuery taskQuery;
 
-    protected abstract void OnTaskComplete(EntityManager em, Entity entity);
+    protected abstract void OnTaskComplete(EntityManager em, Entity entity, Task result);
     protected abstract void OnTaskFailed(EntityManager em, Entity entity, AggregateException exception);
 
     //abstract field derivers must implement which says whether to auto create a task on start running
@@ -19,15 +19,15 @@ public abstract partial class TaskSystem : SystemBase
     protected abstract void OnSystemUpdate();
 
     protected abstract ComponentType FlagType { get; }
-    protected abstract ComponentType[] RequiredForUpdate { get; }
+    protected abstract ComponentType[] RequireForUpdate { get; }
 
     protected abstract Task Setup(EntityManager em, Entity entity);
 
     sealed protected override void OnCreate()
     {
-        foreach (var c in RequiredForUpdate)
+        foreach (var c in RequireForUpdate)
         {
-            RequireForUpdate(GetEntityQuery(RequiredForUpdate));
+            RequireForUpdate(GetEntityQuery(RequireForUpdate));
         }
 
         // Create the EntityQuery
@@ -50,7 +50,7 @@ public abstract partial class TaskSystem : SystemBase
 
     public class TaskComponent : IComponentData, IEnableableComponent
     {
-        public System.Threading.Tasks.Task Value;
+        public Task Value;
     }
 
     // Seal OnUpdate to prevent derived systems from overriding
@@ -73,7 +73,9 @@ public abstract partial class TaskSystem : SystemBase
             }
 
             EntityManager.RemoveComponent<TaskComponent>(e);
-            OnTaskComplete(EntityManager, e);
+
+            //Try and cast from a Task to a Task<T> if possible, safely
+            OnTaskComplete(EntityManager, e, item.Value);
         }
 
         // Let the derived system do its update
