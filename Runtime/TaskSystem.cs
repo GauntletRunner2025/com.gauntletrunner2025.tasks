@@ -19,15 +19,15 @@ public abstract partial class TaskSystem : SystemBase
     protected abstract void OnSystemUpdate();
 
     protected abstract ComponentType FlagType { get; }
-    protected abstract ComponentType[] RequireForUpdate { get; }
+    protected abstract ComponentType[] RequiredForUpdate { get; }
 
     protected abstract Task Setup(EntityManager em, Entity entity);
 
     sealed protected override void OnCreate()
     {
-        foreach (var c in RequireForUpdate)
+        foreach (var c in RequiredForUpdate)
         {
-            RequireForUpdate(GetEntityQuery(RequireForUpdate));
+            RequireForUpdate(GetEntityQuery(c));
         }
 
         // Create the EntityQuery
